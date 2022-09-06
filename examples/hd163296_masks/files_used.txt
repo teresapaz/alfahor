@@ -1,0 +1,15 @@
+Names of files used for analysis, available for download at https://alma-maps.info/data.html
+
+HD_163296_CO_220GHz.robust_0.5.JvMcorr.image.fits
+HD_163296_13CO_220GHz.robust_0.5.JvMcorr.image.fits
+HD_163296_C18O_220GHz.robust_0.5.JvMcorr.image.fits
+HD_163296_13CO_110GHz.robust_0.5.JvMcorr.image.fits
+HD_163296_C2H_260GHz_hf1.0.15arcsec.JvMcorr.image.fits
+HD_163296_c-C3H2_260GHz_t1.0.3arcsec.JvMcorr.image.fits
+HD_163296_CN_110GHz_hf1.0.5arcsec.JvMcorr.image.fits
+HD_163296_CN_110GHz_hf2.0.5arcsec.JvMcorr.image.fits
+HD_163296_H2CO_220GHz.0.3arcsec.JvMcorr.image.fits
+HD_163296_HCN_260GHz_hf1.0.3arcsec.JvMcorr.image.fits
+HD_163296_HCN_260GHz_hf2.0.3arcsec.JvMcorr.image.fits
+HD_163296_HCN_260GHz_hf3.0.3arcsec.JvMcorr.image.fits
+HD_163296_HCO+_90GHz.robust_0.5.JvMcorr.image.fits
