@@ -22,7 +22,7 @@ setuptools.setup(
     install_requires=[
         "numpy",
         "scipy",
-        "cv2",
+        "opencv-python",
         "matplotlib",
         "astropy"]
 )
