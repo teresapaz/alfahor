@@ -1,0 +1,8 @@
+*~
+*.fits
+
+build/
+dist/
+*.egg-info
+*.DS_store
+__pycache__

@@ -21,6 +21,8 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     install_requires=[
         "numpy",
+        "scipy",
+        "cv2",
+        "matplotlib",
         "astropy"]
-    }
 )
