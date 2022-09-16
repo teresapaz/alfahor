@@ -26,13 +26,13 @@ def main():
 # --------------------------------------------------------------------------------
 
 class alfahor(object):
-    
+
     """
     ``alfahor`` is a class that reads a spectral cube (FITS file format) and handles
     channel masks that can be created interactively to obtain the vertical structure of
-    a certain molecule.        
+    a certain molecule.
     """
-    
+
     cid = None
     cidmotion=None
     cidsave = None
@@ -49,9 +49,9 @@ class alfahor(object):
         ----------
         fits_file (str) : Path to the fits file.
 
-        pa (float) : position angle of source [degrees]. Can be positive or negative, sign 
-        must be defined such that the lower side of the emission is towards the south once 
-        the system has been rotated. 
+        pa (float) : position angle of source [degrees]. Can be positive or negative, sign
+        must be defined such that the lower side of the emission is towards the south once
+        the system has been rotated.
 
         inc (float) : inclination angle of source [degrees].
 
@@ -60,7 +60,7 @@ class alfahor(object):
         vsys (float) : system velocity [km/s].
 
         folder (string) : folder where masks are or will be saved.
-        
+
         ang_limit (Optional[float]) : If specified, clip data to a square field of view with
         sides given by 'ang_limit' [arcsec]. Default is 5.0.
 
@@ -74,7 +74,7 @@ class alfahor(object):
         dy (Optional[float]) : in case the data is not centered, 'dx' allows to shift the data
         in the vertical axis [pixel]. Default is 0, data is assumed to be centered.
         """
-        
+
         open_fits = fits.open(fits_file)
         self.data_all = np.squeeze(np.squeeze(open_fits[0].data))
         self.len = len(self.data_all[0])
@@ -82,16 +82,22 @@ class alfahor(object):
         self.pix_scale = np.round(abs(open_fits[0].header['CDELT1'])*3600,6)
         self.bmaj = np.radians(open_fits[0].header['bmaj']) * 206265
         self.bmin = np.radians(open_fits[0].header['bmin']) * 206265
-        self.freq_0 = open_fits[0].header['RESTFRQ']
-        self.freq_init = open_fits[0].header['CRVAL3']
-        self.freq_delta = open_fits[0].header['CDELT3']
+        self.unit_axis3 = open_fits[0].header['CUNIT3']
+        if self.unit_axis3 == 'Hz':
+            self.freq_0 = open_fits[0].header['RESTFRQ']
+            self.freq_init = open_fits[0].header['CRVAL3']
+            self.freq_delta = open_fits[0].header['CDELT3']
+        if self.unit_axis3 == 'm/s':
 
-        self.vsys = vsys
+            self.vel_init = open_fits[0].header['CRVAL3']
+            self.vel_delta = open_fits[0].header['CDELT3']
+
+        self.vsys = vsys*1e3
 
         if not os.path.isdir(folder):
             print ('Creating folder %s'%folder)
             os.system('mkdir %s'%folder)
-            
+
         if not use_folder_masks:
             self.limits = ang_limit/self.pix_scale
 
@@ -140,11 +146,11 @@ class alfahor(object):
 
 
     def plot_interactive(self):
-      
+
         """
         Open plotting interface to check for data rotation and create interactive masks.
         """
-        
+
         self.fig = plt.figure(1)
         self.ax = self.fig.add_subplot(2,3,(2,6))
         self.fig.subplots_adjust(bottom=0.25)
@@ -160,11 +166,11 @@ class alfahor(object):
 
         self.ax_power_im_slider = plt.axes([0.25, 0.1, 0.65, 0.03])
 
-        
+
         self.chan_slider = Slider(self.ax_chan_slider, "Channel", 0, len(self.data_all)+1,
                                   valinit=self.chan,
                                   valstep=1,
-                                  #valstep=np.arange(0, len(self.data_all)+1), 
+                                  #valstep=np.arange(0, len(self.data_all)+1),
                                   color="green",
                                   #initcolor='none' #--> Available in mpl>v3.5 only
         )
@@ -216,27 +222,27 @@ class alfahor(object):
         plt.show()
 
     def button_save_masks_far(self, event):
-        
+
         """
         Button action for saving far side mask
         """
-        
+
         if self.cidsave == None:
             self.side = 'far'
             self.cidsave = self.fig.canvas.mpl_connect('button_press_event', self.save_masks)
 
     def button_save_masks_near(self, event):
-        
+
         """
         Button action for saving near side mask
         """
-        
+
         if self.cidsave == None:
             self.side = 'near'
             self.cidsave = self.fig.canvas.mpl_connect('button_press_event', self.save_masks)
 
     def button_delete(self, event):
-      
+
         """
         Button action for deleting all masks
         """
@@ -247,11 +253,11 @@ class alfahor(object):
         self.coords_far = []
 
     def save_masks(self, event):
-      
+
         """
         Button action for saving masks
         """
-        
+
         if(self.cidsave is None):
             return
 
@@ -271,8 +277,8 @@ class alfahor(object):
 
         if self.side == 'near':
             self.mask_near = mask_chan
-            np.save(self.folder + '/mask_near_chan_' + str(self.chan), np.array([self.mask_near]+ [self.chan], dtype=object))                
-                
+            np.save(self.folder + '/mask_near_chan_' + str(self.chan), np.array([self.mask_near]+ [self.chan], dtype=object))
+
         if self.side == 'far':
             self.mask_far = mask_chan
             np.save(self.folder + '/mask_far_chan_' + str(self.chan), np.array([self.mask_far]+ [self.chan], dtype=object))
@@ -280,11 +286,11 @@ class alfahor(object):
         self.cidsave = None
 
     def onclick_makemask(self, event):
-        
+
         """
         Button action for making masks
         """
-        
+
         if(self.cid is None):
             return
 
@@ -331,11 +337,11 @@ class alfahor(object):
                 self.fig.canvas.draw()
 
     def onmove(self, event):
-      
+
         """
         Cursor action for drawing masks
         """
-        
+
         if(self.cid is None):
             return
 
@@ -354,7 +360,7 @@ class alfahor(object):
             self.fig.canvas.draw()
 
     def button_action_near(self, event):
-       
+
         """
         Button action for making near side mask
         """
@@ -369,7 +375,7 @@ class alfahor(object):
             pass
 
     def button_action_far(self, event):
-      
+
         """
         Button action for making far side mask
         """
@@ -384,11 +390,11 @@ class alfahor(object):
             pass
 
     def update_chan_slider(self, chan):
-        
+
         """
         Channel slider
         """
-        
+
         data_chan = self.data_all[chan]
         rot_im = self.rotate_channel_images(data_chan)
         self.chan_image = self.ax.imshow(rot_im, zorder=1, origin='lower', cmap='jet', norm=colors.PowerNorm(gamma=self.im_power))
@@ -396,11 +402,11 @@ class alfahor(object):
         self.chan = chan
 
     def update_power_im_slider(self, power):
-      
+
         """
         Slider to regulate plotting color scale.
         """
-        
+
         self.im_power = power
         data_chan = self.data_all[self.chan]
         rot_im = self.rotate_channel_images(data_chan)
@@ -408,36 +414,41 @@ class alfahor(object):
         self.fig.canvas.draw()
 
     def rotate_channel_images(self, data_chan):
-        
+
         """
-        Rotate data, important to define position angle sign to get bottom surface 
+        Rotate data, important to define position angle sign to get bottom surface
         towards the south.
-        
+
         Args:
           data_chan (array): channel emission to be rotated.
-        
+
         Returns:
-          rotated data (array) 
+          rotated data (array)
         """
-        
-        return ndimage.rotate(data_chan, (self.angle_for_rot), reshape=False) 
+
+        return ndimage.rotate(data_chan, (self.angle_for_rot), reshape=False)
 
     def channel_velocity(self, chan):
-        
+
         """
         Obtain velocity of a certain channel.
-        
+
         Args:
           chan (float): channel number.
-        
+
         Returns:
           vchan (float): channel velocity.
         """
+        if self.unit_axis3 == 'Hz':
+            vchan = sc.c*(1 - ((self.freq_init + chan*self.freq_delta)/self.freq_0))
 
-        vchan = sc.c*(1 - ((self.freq_init + chan*self.freq_delta)/self.freq_0))/1e3
+            v_init = sc.c*(1 - ((self.freq_init + self.freq_delta)/self.freq_0))
+            v_end = sc.c*(1 - ((self.freq_init + len(self.data_all)*self.freq_delta)/self.freq_0))
 
-        v_init = sc.c*(1 - ((self.freq_init + self.freq_delta)/self.freq_0))/1e3
-        v_end = sc.c*(1 - ((self.freq_init + len(self.data_all)*self.freq_delta)/self.freq_0))/1e3
+        if self.unit_axis3 == 'm/s':
+            vchan = (self.vel_init + chan*self.vel_delta)
+            v_init = self.vel_init
+            v_end = (self.vel_init + len(self.data_all)*self.vel_delta )
 
         if v_init>v_end:
             return -(vchan - self.vsys)
@@ -446,27 +457,30 @@ class alfahor(object):
             return vchan - self.vsys
 
     def get_center_chan_info(self):
-        
+
         """
         Obtains the number of the channel closest to the systemic velocity and the maximum
         emission flux in that channel.
-          
+
         Returns:
           ctrl_chan (float): channel number of emission closest to the systemic velocity.
           vmax (float): maximum emission value in ctrl_chan [Jy/beam]
         """
-        
-        ctrl_chan = int(np.round( (self.freq_0 * (1- self.vsys*1e3/sc.c) - self.freq_init) / self.freq_delta))
-        vmax = max(np.concatenate(self.data_all[ctrl_chan]))
+        if self.unit_axis3 == 'Hz':
+            ctrl_chan = int(np.round( (self.freq_0 * (1- self.vsys/sc.c) - self.freq_init) / self.freq_delta))
 
+        if self.unit_axis3 == 'm/s':
+            ctrl_chan = int(np.round((self.vsys - self.vel_init)/self.vel_delta))
+
+        vmax = max(np.concatenate(self.data_all[ctrl_chan]))
         return ctrl_chan, vmax
 
     def tracing_maxima(self):
-        
+
         """
-        Determines the location of emission maxima in a rotated channel within the far 
+        Determines the location of emission maxima in a rotated channel within the far
         and near side masks using cartesian coordinates.
-          
+
         Returns:
           x_near_max_all (list): positions of maxima along x axis, for near side emission
           y_near_max_all (list): positions of maxima along y axis, for near side emission
@@ -568,25 +582,25 @@ class alfahor(object):
         return x_near_max_all, y_near_max_all, x_far_max_all, y_far_max_all
 
     def check_plot(self, true_PA, ang_extent=0., all_chans=[], vmax=0, vmin=0, gamma=1.0, ncols=6, nrows=5, put_masks=True, put_dots=True):
-        
+
         """
         Creates and saves a plot with channel maps, overlaying if specified the used masks and
         maxima location.
-        
+
         Args:
-          true_PA (bool): ''True'' indicates the channels must be imaged as observed in the 
-          original data ''False'' indicates the channels are imaged rotated, such that the 
+          true_PA (bool): ''True'' indicates the channels must be imaged as observed in the
+          original data ''False'' indicates the channels are imaged rotated, such that the
           bottom side is towards the south as used in the analysis.
           ang_extent (Optional[float])
-          all_chans (Optional[list]) 
+          all_chans (Optional[list])
           vmax (Optional[float])
           vmin (Optional[float])
-          gamma (Optional[float]) 
+          gamma (Optional[float])
           ncols (Optional[int])
           nrows (Optional[int])
           put_masks (Optional[bool])
           put_dots (Optional[bool])
-        
+
         Returns:
           Saves pdf channel grid.
         """
@@ -710,7 +724,7 @@ class alfahor(object):
         plt.show()
 
     def calculate_vertical_structure(self):
-      
+
         """
         Obtains vertical structure values (height of emission at a given radius) based on
         Pinte et al. 2018. Values are saved in a txt file, together with the relevant
@@ -796,11 +810,11 @@ class alfahor(object):
         self.bin_values()
 
     def plot_height_prof(self):
-        
+
         """
         Plots vertical profile.
         """
-        
+
         if self.vert_struct_r is None:
             raise ValueError('Do calculate_vertical_structure()')
             return
