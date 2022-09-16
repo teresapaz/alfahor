@@ -12,7 +12,7 @@ from matplotlib.patches import Circle
 import glob
 import scipy.constants as sc
 import cv2
-
+import os
 
 # --------------------------------------------------------------------------------
 # main
@@ -25,33 +25,12 @@ def main():
 # functions
 # --------------------------------------------------------------------------------
 
-class alfahor():
+class alfahor(object):
     
     """
-    ``alfahor`` is an instance that reads a spectral cube (FITS file format) and handles
+    ``alfahor`` is a class that reads a spectral cube (FITS file format) and handles
     channel masks that can be created interactively to obtain the vertical structure of
-    a certain molecule.
-    
-    Args:
-        fits_file (str): Path to the fits file.
-        pa (float): position angle of source [degrees]. Can be positive or negative, sign 
-        must be defined such that the lower side of the emission is towards the south once 
-        the system has been rotated. 
-        inc (float): inclination angle of source [degrees].
-        dist (float): distance of source [parsec].
-        vsys (float): system velocity [km/s].
-        folder (string): folder where masks are or will be saved.
-        
-        ang_limit (Optional[float]): If specified, clip data to a square field of view with
-        sides given by 'ang_limit' [arcsec]. Default is 5.0.
-        use_folder_masks (Optional[bool]): If masks have already been saved for this source
-        in 'folder' set to ''True''. This will ensure the data size is equal to the previous
-        mask size. Default assumes no previous masks exist ''False''.
-        dx (Optional[float]): in case the data is not centered, 'dx' allows to shift the data
-        in the horizontal axis [pixel]. Default is 0, data is assumed to be centered.
-        dy (Optional[float]): in case the data is not centered, 'dx' allows to shift the data
-        in the vertical axis [pixel]. Default is 0, data is assumed to be centered.
-        
+    a certain molecule.        
     """
     
     cid = None
@@ -63,7 +42,39 @@ class alfahor():
     lines_near = []
 
     def __init__(self, fits_file, pa, inc, dist, vsys, folder, ang_limit=5.0, use_folder_masks=False, dx=0, dy=0):
+        """
+        Initialise alfahor
 
+        Parameters
+        ----------
+        fits_file (str) : Path to the fits file.
+
+        pa (float) : position angle of source [degrees]. Can be positive or negative, sign 
+        must be defined such that the lower side of the emission is towards the south once 
+        the system has been rotated. 
+
+        inc (float) : inclination angle of source [degrees].
+
+        dist (float) : distance of source [parsec].
+
+        vsys (float) : system velocity [km/s].
+
+        folder (string) : folder where masks are or will be saved.
+        
+        ang_limit (Optional[float]) : If specified, clip data to a square field of view with
+        sides given by 'ang_limit' [arcsec]. Default is 5.0.
+
+        use_folder_masks (Optional[bool]) : If masks have already been saved for this source
+        in 'folder' set to ''True''. This will ensure the data size is equal to the previous
+        mask size. Default assumes no previous masks exist ''False''.
+
+        dx (Optional[float]) : in case the data is not centered, 'dx' allows to shift the data
+        in the horizontal axis [pixel]. Default is 0, data is assumed to be centered.
+
+        dy (Optional[float]) : in case the data is not centered, 'dx' allows to shift the data
+        in the vertical axis [pixel]. Default is 0, data is assumed to be centered.
+        """
+        
         open_fits = fits.open(fits_file)
         self.data_all = np.squeeze(np.squeeze(open_fits[0].data))
         self.len = len(self.data_all[0])
@@ -77,6 +88,10 @@ class alfahor():
 
         self.vsys = vsys
 
+        if not os.path.isdir(folder):
+            print ('Creating folder %s'%folder)
+            os.system('mkdir %s'%folder)
+            
         if not use_folder_masks:
             self.limits = ang_limit/self.pix_scale
 
@@ -122,7 +137,7 @@ class alfahor():
         self.vert_struct_h = None
 
         self.im_power = 1
-        pass
+
 
     def plot_interactive(self):
       
@@ -145,13 +160,22 @@ class alfahor():
 
         self.ax_power_im_slider = plt.axes([0.25, 0.1, 0.65, 0.03])
 
+        
         self.chan_slider = Slider(self.ax_chan_slider, "Channel", 0, len(self.data_all)+1,
-                                    valinit=self.chan, valstep=np.arange(0, len(self.data_all)+1),
-                                    color="green", initcolor='none')
+                                  valinit=self.chan,
+                                  valstep=1,
+                                  #valstep=np.arange(0, len(self.data_all)+1), 
+                                  color="green",
+                                  #initcolor='none' #--> Available in mpl>v3.5 only
+        )
 
         self.power_im_slider = Slider(self.ax_power_im_slider, "Scale Image", 0, 2,
-                                    valinit=self.im_power, valstep=np.linspace(0,2,21),
-                                    color="blue", initcolor='none')
+                                      valinit=self.im_power,
+                                      valstep=0.1,
+                                      #valstep=np.linspace(0,2,21),
+                                      color="blue",
+                                      #initcolor='none'
+        )
 
 
         self.chan_slider.on_changed(self.update_chan_slider)
@@ -247,7 +271,8 @@ class alfahor():
 
         if self.side == 'near':
             self.mask_near = mask_chan
-            np.save(self.folder + '/mask_near_chan_' + str(self.chan), np.array([self.mask_near]+ [self.chan], dtype=object))
+            np.save(self.folder + '/mask_near_chan_' + str(self.chan), np.array([self.mask_near]+ [self.chan], dtype=object))                
+                
         if self.side == 'far':
             self.mask_far = mask_chan
             np.save(self.folder + '/mask_far_chan_' + str(self.chan), np.array([self.mask_far]+ [self.chan], dtype=object))

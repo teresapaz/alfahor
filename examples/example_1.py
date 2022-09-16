@@ -14,14 +14,19 @@ folder_masks = 'hd163296_masks/12CO_masks'
 #change the sign of PA so that when using plot_interactive() the bottom side is to the south
 #if you do not have the masks, you can use ang_limit=NUMBER , where NUMBER is the extent of the image in arcsec. Default is 5.0
 
-t = alfahor(fits_file, PA, inc, dist, vsys, folder_masks, use_folder_masks=True)
-
+try:
+    t = alfahor(fits_file, PA, inc, dist, vsys, folder_masks, use_folder_masks=True)
+except FileNotFoundError:
+    import subprocess
+    _ = subprocess.run(["bash", "download_MAPS.sh"])
+    t = alfahor(fits_file, PA, inc, dist, vsys, folder_masks, use_folder_masks=True)
+        
 #if you don't have the masks first create them by using t.plot_interactive()
-#when running calculate_vertical_structure a file is saved contianing the information on radial and height position, as well as the input parameters for the calculations
+#when running calculate_vertical_structure a file is saved containing the information on radial and height position, as well as the input parameters for the calculations
 
 t.calculate_vertical_structure() 
 
-#plot_height_prof allows you to chekc the vertical profile, but does not save the figures
+#plot_height_prof allows you to check the vertical profile, but does not save the figures
 
 t.plot_height_prof()
 
