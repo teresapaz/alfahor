@@ -426,7 +426,7 @@ class alfahor(object):
         Returns:
           rotated data (array)
         """
-
+        data_chan[np.isnan(data_chan)] = 0
         return ndimage.rotate(data_chan, (self.angle_for_rot), reshape=False)
 
     def channel_velocity(self, chan):
