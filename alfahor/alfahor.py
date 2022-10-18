@@ -41,7 +41,7 @@ class alfahor(object):
     coords_near = []
     lines_near = []
 
-    def __init__(self, fits_file, pa, inc, dist, vsys, folder, ang_limit=5.0, use_folder_masks=False, dx=0, dy=0):
+    def __init__(self, fits_file, pa, inc, dist, vsys, folder, ang_limit=5.0, use_folder_masks=False, dx=0, dy=0, ctrl_chan=0):
         """
         Initialise alfahor
 
@@ -127,6 +127,7 @@ class alfahor(object):
         self.pa_sign = pa/abs(pa)
         self.dx = dx
         self.dy = dy
+        self.ctrl_chan = ctrl_chan
 
         if self.pa_sign>0:
             self.angle_for_rot = self.PA - 90
@@ -466,14 +467,18 @@ class alfahor(object):
           ctrl_chan (float): channel number of emission closest to the systemic velocity.
           vmax (float): maximum emission value in ctrl_chan [Jy/beam]
         """
-        if self.unit_axis3 == 'Hz':
-            ctrl_chan = int(np.round( (self.freq_0 * (1- self.vsys/sc.c) - self.freq_init) / self.freq_delta))
 
-        if self.unit_axis3 == 'm/s':
-            ctrl_chan = int(np.round((self.vsys - self.vel_init)/self.vel_delta))
+        if self.ctrl_chan ==0:
+            if self.unit_axis3 == 'Hz':
+                ctrl_chan = int(np.round( (self.freq_0 * (1- self.vsys/sc.c) - self.freq_init) / self.freq_delta))
 
-        vmax = max(np.concatenate(self.data_all[ctrl_chan]))
-        return ctrl_chan, vmax
+            if self.unit_axis3 == 'm/s':
+                ctrl_chan = int(np.round((self.vsys - self.vel_init)/self.vel_delta))
+
+            self.ctrl_chan = ctrl_chan
+
+        vmax = max(np.concatenate(self.data_all[self.ctrl_chan]))
+        return self.ctrl_chan, vmax
 
     def tracing_maxima(self):
 
