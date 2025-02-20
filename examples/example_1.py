@@ -6,6 +6,7 @@ PA = -133.3 #sign to ensure that bottom disk side is towards the south in t.plot
 inc = 46.7
 dist = 101. #in pc
 vsys = 5.8 #in km/s
+mstar = 2.0
 
 fits_file = 'HD_163296_CO_220GHz.robust_0.5.JvMcorr.image.fits'
 folder_masks = 'hd163296_masks/12CO_masks'
@@ -15,16 +16,16 @@ folder_masks = 'hd163296_masks/12CO_masks'
 #if you do not have the masks, you can use ang_limit=NUMBER , where NUMBER is the extent of the image in arcsec. Default is 5.0
 
 try:
-    t = alfahor(fits_file, PA, inc, dist, vsys, folder_masks, use_folder_masks=True)
+    t = alfahor(fits_file, PA, inc, dist, vsys, mstar, folder_masks, use_folder_masks=True)
 except FileNotFoundError:
     import subprocess
     _ = subprocess.run(["bash", "download_MAPS.sh"])
-    t = alfahor(fits_file, PA, inc, dist, vsys, folder_masks, use_folder_masks=True)
-        
+    t = alfahor(fits_file, PA, inc, dist, vsys, mstar, folder_masks, use_folder_masks=True)
+
 #if you don't have the masks first create them by using t.plot_interactive()
 #when running calculate_vertical_structure a file is saved containing the information on radial and height position, as well as the input parameters for the calculations
 
-t.calculate_vertical_structure() 
+t.calculate_vertical_structure()
 
 #plot_height_prof allows you to check the vertical profile, but does not save the figures
 

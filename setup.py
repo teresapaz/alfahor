@@ -10,9 +10,9 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 setuptools.setup(
     name="alfahor",
-    version="1.0.4",
+    version="1.1.0",
     author="Teresa Paneque-Carreño",
-    author_email='tpaneque@eso.org',
+    author_email='tpaneque@umich.edu',
     packages=["alfahor"],
     url="https://github.com/teresapaz/alfahor",
     license="LICENSE.md",

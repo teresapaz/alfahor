@@ -13,6 +13,12 @@ import glob
 import scipy.constants as sc
 import cv2
 import os
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib.ticker as ticker
+from gofish import imagecube
+from matplotlib.colors import Normalize,LogNorm
+from scipy.interpolate import griddata
 
 # --------------------------------------------------------------------------------
 # main
@@ -41,7 +47,7 @@ class alfahor(object):
     coords_near = []
     lines_near = []
 
-    def __init__(self, fits_file, pa, inc, dist, vsys, folder, ang_limit=5.0, use_folder_masks=False, dx=0, dy=0, ctrl_chan=0):
+    def __init__(self, fits_file, pa, inc, dist, vsys, mstar, folder, ang_limit=5.0, use_folder_masks=False, dx=0, dy=0, ctrl_chan=0):
         """
         Initialise alfahor
 
@@ -61,6 +67,8 @@ class alfahor(object):
 
         folder (string) : folder where masks are or will be saved.
 
+        mstar (float) : stellar mass [Msun].
+
         ang_limit (Optional[float]) : If specified, clip data to a square field of view with
         sides given by 'ang_limit' [arcsec]. Default is 5.0.
 
@@ -76,6 +84,7 @@ class alfahor(object):
         """
 
         open_fits = fits.open(fits_file)
+        self.fits_file = fits_file
         self.data_all = np.squeeze(np.squeeze(open_fits[0].data))
         self.len = len(self.data_all[0])
         self.center = self.len/2.
@@ -117,6 +126,7 @@ class alfahor(object):
         self.len = len(self.data_all[0])
         self.center = self.len/2.
 
+        self.mstar = mstar
         self.PA = pa #here + or - to get bottom surface in south
         self.inc = inc
         self.dist = dist
@@ -142,6 +152,9 @@ class alfahor(object):
 
         self.vert_struct_r = None
         self.vert_struct_h = None
+
+        self.data_co_surf = None
+        self.data_levels = None
 
         self.im_power = 1
 
@@ -191,7 +204,7 @@ class alfahor(object):
 
         data_chan = self.data_all[self.chan]
         rot_im = self.rotate_channel_images(data_chan)
-        self.chan_image = self.ax.imshow(rot_im, origin='lower', cmap='jet', norm=colors.PowerNorm(gamma=self.im_power))
+        self.chan_image = self.ax.imshow(rot_im, origin='lower', cmap='magma', norm=colors.PowerNorm(gamma=self.im_power))
 
         #self.ax.add_patch(Circle((self.center, self.center), radius=3.5, color='white'))
         self.ax.tick_params(bottom = False, left = False, labelbottom = False, labelleft = False)
@@ -398,7 +411,7 @@ class alfahor(object):
 
         data_chan = self.data_all[chan]
         rot_im = self.rotate_channel_images(data_chan)
-        self.chan_image = self.ax.imshow(rot_im, zorder=1, origin='lower', cmap='jet', norm=colors.PowerNorm(gamma=self.im_power))
+        self.chan_image = self.ax.imshow(rot_im, zorder=1, origin='lower', cmap='magma', norm=colors.PowerNorm(gamma=self.im_power))
         self.fig.canvas.draw()
         self.chan = chan
 
@@ -411,7 +424,7 @@ class alfahor(object):
         self.im_power = power
         data_chan = self.data_all[self.chan]
         rot_im = self.rotate_channel_images(data_chan)
-        self.chan_image = self.ax.imshow(rot_im, zorder=1, origin='lower', cmap='jet', norm=colors.PowerNorm(gamma=self.im_power))
+        self.chan_image = self.ax.imshow(rot_im, zorder=1, origin='lower', cmap='magma', norm=colors.PowerNorm(gamma=self.im_power))
         self.fig.canvas.draw()
 
     def rotate_channel_images(self, data_chan):
@@ -443,19 +456,15 @@ class alfahor(object):
         if self.unit_axis3 == 'Hz':
             vchan = sc.c*(1 - ((self.freq_init + chan*self.freq_delta)/self.freq_0))
 
-            v_init = sc.c*(1 - ((self.freq_init + self.freq_delta)/self.freq_0))
-            v_end = sc.c*(1 - ((self.freq_init + len(self.data_all)*self.freq_delta)/self.freq_0))
+            v_init = sc.c*(1 - ((self.freq_init)/self.freq_0))
+            v_end = sc.c*(1 - ((self.freq_init + (len(self.data_all)-1)*self.freq_delta)/self.freq_0))
 
         if self.unit_axis3 == 'm/s':
             vchan = (self.vel_init + chan*self.vel_delta)
             v_init = self.vel_init
             v_end = (self.vel_init + len(self.data_all)*self.vel_delta )
 
-        if v_init>v_end:
-            return -(vchan - self.vsys)
-
-        if v_init<v_end:
-            return vchan - self.vsys
+        return vchan
 
     def get_center_chan_info(self):
 
@@ -586,7 +595,8 @@ class alfahor(object):
 
         return x_near_max_all, y_near_max_all, x_far_max_all, y_far_max_all
 
-    def check_plot(self, true_PA, ang_extent=0., all_chans=[], vmax=0, vmin=0, gamma=1.0, ncols=6, nrows=5, put_masks=True, put_dots=True):
+    def check_plot(self, true_PA, ang_extent=0., all_chans=[], vmax=0, vmin=0, gamma=1.0, cmap = 'magma', ncols=6, nrows=5, put_masks=True, put_dots=True,
+                    put_center = True, color_sides = ['white', 'cyan'], plot_isovel = False, zfunc_front=None, zfunc_back=None, rmax=None, title=''):
 
         """
         Creates and saves a plot with channel maps, overlaying if specified the used masks and
@@ -609,9 +619,11 @@ class alfahor(object):
         Returns:
           Saves pdf channel grid.
         """
+
         if vmax==0:
             ctrl_chan, vmax = self.get_center_chan_info()
-        if all_chans==[]:
+
+        if len(all_chans)==0:
             ctrl_chan, vmax_0 = self.get_center_chan_info()
             from_ctr = int(np.round(ncols*nrows/2))
             all_chans = np.arange(ctrl_chan-from_ctr, ctrl_chan+from_ctr)
@@ -628,10 +640,14 @@ class alfahor(object):
         fig = plt.figure(figsize=(ncols*2, nrows*2))
         spec = gridspec.GridSpec(ncols= ncols, nrows = nrows , figure =fig, wspace = 0.01, hspace=0.01)
 
+        ax_last = fig.add_subplot(spec[nrows-1, ncols-1])
+        ax_last.axis("off")
         first = 0
         row = 0
+        far_color, near_color = color_sides[0], color_sides[1]
 
         for channel in range(len(all_chans)):
+            chan_vel = self.channel_velocity(all_chans[channel])
             if channel!=0:
                 if math.floor(channel/ncols)==first:
                     row+=1
@@ -647,7 +663,7 @@ class alfahor(object):
             if true_PA:
                 img_plot = self.data_all[all_chans[channel]]
 
-            ax.imshow(img_plot, origin = 'lower', cmap = 'magma',
+            im = ax.imshow(img_plot, origin = 'lower', cmap = cmap,
                         norm=colors.PowerNorm(gamma=gamma, vmax=vmax, vmin=vmin))
 
             if put_masks:
@@ -655,13 +671,13 @@ class alfahor(object):
                     mask_far_plot = np.load(self.folder + '/mask_far_chan_'+str(all_chans[channel])+'.npy', allow_pickle=True, encoding='latin1')[0]
                     mask_near_plot = np.load(self.folder + '/mask_near_chan_'+str(all_chans[channel])+'.npy', allow_pickle=True, encoding='latin1')[0]
                     if not true_PA:
-                        ax.contour(mask_far_plot, origin = 'lower', colors = ['white'], linewidths = [0.5])
-                        ax.contour(mask_near_plot, origin = 'lower', colors = ['cyan'], linewidths = [0.5])
+                        ax.contour(mask_far_plot, origin = 'lower', colors = [far_color], linewidths = [1.])
+                        ax.contour(mask_near_plot, origin = 'lower', colors = [near_color], linewidths = [1.])
                     if true_PA:
                         mask_far_plot = (np.round(ndimage.rotate(mask_far_plot, -self.angle_for_rot, reshape=False)))
                         mask_near_plot =  (np.round(ndimage.rotate(mask_near_plot, -self.angle_for_rot, reshape=False)))
-                        ax.contour(mask_far_plot , origin = 'lower', colors = ['white'], linewidths = [0.5])
-                        ax.contour( mask_near_plot, origin = 'lower', colors = ['cyan'], linewidths = [0.5])
+                        ax.contour(mask_far_plot , origin = 'lower', colors = [far_color], linewidths = [1.])
+                        ax.contour( mask_near_plot, origin = 'lower', colors = [near_color], linewidths = [1.])
 
             if put_dots:
                 if all_chans[channel] in chan_array:
@@ -675,13 +691,14 @@ class alfahor(object):
                     patches_far = []
                     if not true_PA:
                         for i in range(len(x_near_max)):
-                            patches_near.append(Circle((x_near_max[i], y_near_max[i]), radius=1., color='cyan'))
+                            patches_near.append(Circle((x_near_max[i], y_near_max[i]), radius=2.5, color=near_color, edgecolor='white'))
 
                         for i in range(len(x_far_max)):
-                            patches_far.append(Circle((x_far_max[i], y_far_max[i]), radius=1., color='white'))
+                            patches_far.append(Circle((x_far_max[i], y_far_max[i]), radius=2.5, color=far_color, edgecolor='white'))
 
-                        patches_far.append(Circle((self.center, self.center), radius=3., color='yellow'))
-                        patches_far.append(Circle((self.center, self.center), radius=3., color='yellow'))
+                        if put_center:
+                            patches_far.append(Circle((self.center, self.center), radius=3., color='yellow'))
+                            patches_far.append(Circle((self.center, self.center), radius=3., color='yellow'))
 
                     if true_PA:
 
@@ -699,26 +716,83 @@ class alfahor(object):
                         y_near_rot = x_near_max*np.sin(angle) + y_near_max*np.cos(angle) + self.center
 
                         for i in range(len(x_near_max)):
-                            patches_near.append(Circle((x_near_rot[i], y_near_rot[i]), radius=1.5, color='cyan'))
+                            patches_near.append(Circle((x_near_rot[i], y_near_rot[i]), radius=2.5, color=near_color, edgecolor='white'))
 
                         for i in range(len(x_far_max)):
-                            patches_far.append(Circle((x_far_rot[i], y_far_rot[i]), radius=1.5, color='white'))
+                            patches_far.append(Circle((x_far_rot[i], y_far_rot[i]), radius=2.5, color=far_color, edgecolor='white'))
 
-                        patches_far.append(Circle((self.center, self.center), radius=3.5, color='yellow'))
-                        patches_far.append(Circle((self.center, self.center), radius=3.5, color='yellow'))
+                        if put_center:
+                            patches_far.append(Circle((self.center, self.center), radius=3.5, color='yellow'))
+                            patches_far.append(Circle((self.center, self.center), radius=3.5, color='yellow'))
 
                     for p in patches_far+patches_near:
                         ax.add_patch(p)
 
-            ax.set_xticklabels([])
-            ax.set_yticklabels([])
-            ax.set_xticks([])
-            ax.set_yticks([])
             if ang_extent != 0:
                 region = ang_extent/self.pix_scale
                 if region <= self.center:
                     ax.set_xlim(self.center - region, self.center + region)
                     ax.set_ylim(self.center - region, self.center + region)
+
+            if plot_isovel:
+                vchan = self.channel_velocity(all_chans[channel])
+                if zfunc_back is not None:
+                    vel_front, vel_back = self.keplerian_map_height(zfunc_front, zfunc_back= zfunc_back,rmax= rmax)
+                    ax.contour(vel_back, [vchan], colors='white', linestyles=['dashed'], alpha=0.5)
+
+                if zfunc_back is None:
+                    vel_front = self.keplerian_map_height(zfunc_front, rmax=rmax)
+
+                ax.contour(vel_front, [vchan], colors='white', alpha=0.5)
+
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+            if row==0 and math.floor(channel/ncols)== nrows-1:
+
+                if ang_extent != 0:
+                    if ang_extent>3.:
+                        step = 1.5
+                    if ang_extent<=3.:
+                        step = 1.
+
+                    ticks = list(np.flip(-1*np.arange(0, ang_extent, step)[1:])) + [0] + list(np.arange(0, ang_extent, step)[1:])
+                    ticks_array = self.center + np.array(ticks)/self.pix_scale
+                    ax.set_xticks(ticks_array)
+                    ax.set_yticks(ticks_array)
+                    ax.set_xticklabels(np.flip(np.array(ticks)).astype(int))
+                    ax.set_yticklabels(np.array(ticks).astype(int))
+
+                    ax.set_xlabel(r'$\Delta\alpha$' + '[\"]',fontsize=11)
+                    ax.set_ylabel(r'$\Delta\delta$' + '[\"]',fontsize=11, labelpad=2)
+
+
+
+
+            #ax.text(0.01, 0.89, str(np.round(chan_vel/1e3-3.0, 2)) + r'km/s', fontsize=10, transform=ax.transAxes)
+        if len(title)>0:
+            fig.text(0.13, 0.89, title, fontsize=17)
+
+        def fmt(x, pos):
+            a, b = '{:.5e}'.format(x).split('e')
+            c = float(a)*(10.**(float(b) + 3))
+            return '{}'.format(c)
+
+
+
+        axins1 = inset_axes(ax_last,
+                           width="10%",  # width = 50% of parent_bbox width\n",
+                           height="200%",
+                           loc='lower left',
+                           bbox_to_anchor=(1.05, 0., 1, 1),
+                           bbox_transform=ax_last.transAxes,
+                           borderpad=0)
+
+        cb = fig.colorbar(im, cax=axins1, format=ticker.FuncFormatter(fmt))
+        cb.set_label('Intensity (mJy beam' + r'$^{-1}$' + ')' , labelpad=20.0,  rotation=270)
+        ax = cb.ax
 
         if true_PA:
             plt.savefig(self.folder +'/channel_maps.pdf')
@@ -825,32 +899,37 @@ class alfahor(object):
             return
         r_plot_lines = np.arange(1.1*(max(self.vert_struct_r)))
 
-        plt.figure(1)
-        plt.plot(self.vert_struct_r, self.vert_struct_h, '.')
-        plt.plot(r_plot_lines, 0.1*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
-        plt.plot(r_plot_lines, 0.3*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
-        plt.plot(r_plot_lines, 0.5*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        fig = plt.figure(figsize=(10, 5))
+        spec = gridspec.GridSpec(ncols= 2, nrows = 1 , figure =fig, wspace = 0.1, hspace=0.01)
 
-        plt.xlabel('Radial Distance [au]', fontsize=13)
-        plt.ylabel('Height [au]', fontsize=13)
+        ax = fig.add_subplot(spec[0])
+        ax.plot(self.vert_struct_r, self.vert_struct_h, '.')
+        ax.plot(r_plot_lines, 0.1*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        ax.plot(r_plot_lines, 0.3*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        ax.plot(r_plot_lines, 0.5*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
 
-        plt.xlim(0, 1.05*max(self.vert_struct_r))
-        plt.ylim(0, 1.05*max(self.vert_struct_h))
+        ax.set_xlabel('Radial Distance [au]', fontsize=13)
+        ax.set_ylabel('Height [au]', fontsize=13)
 
-        plt.figure(2)
+        ax.set_xlim(0, 1.05*max(self.vert_struct_r))
+        ax.set_ylim(0, 1.05*max(self.vert_struct_h))
 
-        plt.fill_between(self.vert_r_bin, self.vert_h_bin-self.vert_h_bin_std , self.vert_h_bin+self.vert_h_bin_std, color='blue', alpha=0.1)
-        plt.plot(self.vert_r_bin, self.vert_h_bin, '-', color='blue')
+        ax = fig.add_subplot(spec[1])
+
+        ax.fill_between(self.vert_r_bin, self.vert_h_bin-self.vert_h_bin_std , self.vert_h_bin+self.vert_h_bin_std, color='blue', alpha=0.1)
+        ax.plot(self.vert_r_bin, self.vert_h_bin, '-', color='blue')
 
 
-        plt.plot(r_plot_lines, 0.1*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
-        plt.plot(r_plot_lines, 0.3*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
-        plt.plot(r_plot_lines, 0.5*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        ax.plot(r_plot_lines, 0.1*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        ax.plot(r_plot_lines, 0.3*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
+        ax.plot(r_plot_lines, 0.5*r_plot_lines, '-', color='grey', linewidth=0.7, alpha=0.5)
 
-        plt.xlabel('Radial Distance [au]', fontsize=13)
-        plt.ylabel('Height [au]', fontsize=13)
-        plt.xlim(0, 1.05*max(self.vert_struct_r))
-        plt.ylim(0, 1.05*max(self.vert_struct_h))
+        ax.set_xlabel('Radial Distance [au]', fontsize=13)
+        #ax.set_ylabel('Height [au]', fontsize=13)
+        ax.set_xlim(0, 1.05*max(self.vert_struct_r))
+        ax.set_ylim(0, 1.05*max(self.vert_struct_h))
+
+        plt.savefig(self.folder +'/height_plot.pdf')
         plt.show()
 
     def bin_values(self):
@@ -900,3 +979,241 @@ class alfahor(object):
 
 
         return list(np.sort(np.array(num_array)))
+
+    def keplerian_map_height(self, zfunc_front, zfunc_back=None, rmax=None):
+
+
+        cube = imagecube(self.fits_file, FOV=2*self.limits*self.pix_scale)
+        vel_front = cube.keplerian(inc=self.inc, PA=self.PA, mstar=self.mstar,
+                             dist=self.dist, vlsr=self.vsys, z_func=zfunc_front, r_max=rmax)
+
+        if zfunc_back is not None:
+            vel_back = cube.keplerian(inc=self.inc, PA=self.PA, mstar=self.mstar,
+                                 dist=self.dist, vlsr=self.vsys, z_func=zfunc_back, r_max=rmax)
+
+            return vel_front, vel_back
+
+        return vel_front
+
+    def bright_temp(self, intens_prof, err_prof=[0]):
+
+        h = 6.626196e-27 #planck cte erg s
+        c = 2.997924562e10 #cm s-1
+        k = 1.380622e-16 #erg K-1
+        arcsec2rad = 4.84814136835e-6
+        #bmaj, bmin are in arcsec!
+        freq = self.freq_0
+        beam_area = (self.bmaj*self.bmin)*(arcsec2rad)**2*np.pi/(4.*np.log(2.))
+
+        I = np.array(intens_prof) * (1.e-23/beam_area)
+
+        T_b = (h * freq) /(k * np.log(1 + (2*h*(freq**3)/((I) * (c**2)))))
+
+        return T_b
+
+    def data_temp_map(self, levels):
+
+        all_chans = self.get_mask_array()
+
+        if self.x_near == None:
+            self.tracing_maxima()
+        pix_to_au = self.pix_scale * self.dist
+
+        rad_dist_delta_array_allchan = []
+        h_delta_array_allchan = []
+        temp_far_delta_array_allchan = []
+        temp_near_delta_array_allchan = []
+
+        h_co_allchan = []
+        rad_dist_allchan = []
+        temp_near_co_surf_allchan = []
+        temp_far_co_surf_allchan = []
+
+        for chan in np.arange(len(all_chans)):
+
+            img_chan = self.rotate_channel_images(self.data_all[all_chans[chan]])
+
+            index_n_array = []
+            index_f_array = []
+            for x in self.x_far[chan]:
+                if x in self.x_near[chan]:
+                    index_f = self.x_far[chan].index(x)
+                    index_n = self.x_near[chan].index(x)
+
+                    index_f_array.append(index_f)
+                    index_n_array.append(index_n)
+
+            x_far_max = np.array(self.x_far[chan])[index_f_array]
+            x_near_max = np.array(self.x_near[chan])[index_n_array]
+            y_far_max = np.array(self.y_far[chan])[index_f_array]
+            y_near_max = np.array(self.y_near[chan])[index_n_array]
+
+            y_c = (y_far_max + y_near_max)/2.
+            r_x = (x_far_max-self.center)
+            r_y = (y_far_max - y_c)/(np.cos(np.radians(self.inc)))
+
+            h_co_surf = (-(self.center- y_c)/np.sin(np.radians(self.inc))) *self.pix_scale*self.dist
+            radial_dist = np.sqrt((r_x**2) + (r_y**2)) *self.pix_scale*self.dist
+
+            intens_for_temp_far = img_chan[y_far_max.astype(int), x_far_max.astype(int)]
+            intens_for_temp_near = img_chan[y_near_max.astype(int), x_near_max.astype(int)]
+
+            temp_far = self.bright_temp(intens_for_temp_far)
+            temp_near = self.bright_temp(intens_for_temp_near)
+
+            h_co_allchan.append(h_co_surf[h_co_surf>0])
+            rad_dist_allchan.append(radial_dist[h_co_surf>0])
+            temp_far_co_surf_allchan.append(temp_far[h_co_surf>0])
+            temp_near_co_surf_allchan.append(temp_near[h_co_surf>0])
+
+            #levels
+            rad_dist_delta_array = []
+            h_delta_array = []
+            temp_far_delta_array = []
+            temp_near_delta_array = []
+            for delta in levels:
+
+                y_c = (y_far_max + y_near_max - 2*delta)/2.
+                r_x = (x_far_max-self.center)
+                r_y = (y_far_max - y_c)/(np.cos(np.radians(self.inc)))
+
+                h_delta = (-(self.center- y_c)/np.sin(np.radians(self.inc))) *self.pix_scale*self.dist
+                radial_dist_delta = np.sqrt((r_x**2) + (r_y**2)) *self.pix_scale*self.dist
+                cond_delta = h_delta>0
+
+                intens_for_temp_far_delta = img_chan[y_far_max.astype(int)[cond_delta]-delta, x_far_max.astype(int)[cond_delta]]
+                intens_for_temp_near_delta = img_chan[y_near_max.astype(int)[cond_delta]-delta, x_near_max.astype(int)[cond_delta]]
+
+                temp_far_delta = self.bright_temp(intens_for_temp_far_delta)
+                temp_near_delta = self.bright_temp(intens_for_temp_near_delta)
+
+                h_delta_array.append(h_delta[cond_delta])
+                rad_dist_delta_array.append(radial_dist_delta[cond_delta])
+                temp_far_delta_array.append(temp_far_delta)
+                temp_near_delta_array.append(temp_near_delta)
+
+            rad_dist_delta_array_allchan.append(rad_dist_delta_array)
+            h_delta_array_allchan.append(h_delta_array)
+            temp_far_delta_array_allchan.append(temp_far_delta_array)
+            temp_near_delta_array_allchan.append(temp_near_delta_array)
+
+            self.data_co_surf = [h_co_allchan, rad_dist_allchan, temp_far_co_surf_allchan, temp_near_co_surf_allchan]
+
+            self.data_levels = [h_delta_array_allchan, rad_dist_delta_array_allchan, temp_far_delta_array_allchan, temp_near_delta_array_allchan]
+
+        return
+
+    def plot_temp_analysis(self, levels):
+
+        if self.data_co_surf == None:
+            self.data_temp_map(levels)
+
+        #data_co_surf ,  data_levels = self.data_temp_map(levels)
+
+        col_lev = ['red', 'violet', 'gold', 'green', 'brown', 'black']*(int(len(levels)/6)+1)
+
+        h_co_allchan, rad_dist_allchan, temp_far_co_surf_allchan, temp_near_co_surf_allchan = self.data_co_surf
+
+        h_delta_array_allchan, rad_dist_delta_array_allchan, temp_far_delta_array_allchan, temp_near_delta_array_allchan = self.data_levels
+
+        fig, axs = plt.subplots(1, 2)
+        for i in np.arange(len(h_co_allchan)):
+            axs[0].plot(rad_dist_allchan[i], h_co_allchan[i], '.', color='blue')
+
+            axs[1].plot(rad_dist_allchan[i], 0.5*(temp_far_co_surf_allchan[i]+temp_near_co_surf_allchan[i]), '.', color='blue')
+
+            for j in np.arange(len(levels)):
+                axs[0].plot(rad_dist_delta_array_allchan[i][j], h_delta_array_allchan[i][j], '.', color=col_lev[j])
+                axs[1].plot(rad_dist_delta_array_allchan[i][j], 0.5*(temp_far_delta_array_allchan[i][j]+temp_near_delta_array_allchan[i][j]), '.', color=col_lev[j])
+
+        axs[0].set_xlabel('Radial Distance [au]')
+        axs[1].set_xlabel('Radial Distance [au]')
+
+        axs[0].set_ylabel('Height [au]')
+        axs[1].set_ylabel('Temperature [K]')
+
+        axs[1].axhline(y=21, color='black')
+        #axs[1].axvline(x=262, color='black')
+
+        plt.show()
+
+
+    def temp_map(self, levels, xmax=800, ymax=300):
+
+        if self.data_co_surf == None:
+            self.data_temp_map(levels)
+
+        #data_co_surf ,  data_levels = self.data_temp_map(levels)
+
+        h_co_allchan, rad_dist_allchan, temp_far_co_surf_allchan, temp_near_co_surf_allchan = self.data_co_surf
+
+        h_delta_array_allchan, rad_dist_delta_array_allchan, temp_far_delta_array_allchan, temp_near_delta_array_allchan = self.data_levels
+
+        Nx = xmax
+        Nz = ymax
+
+        grid_array = []
+
+        for i in np.arange(len(h_co_allchan)):
+            grid = np.zeros([Nz,Nx])*np.nan
+            grid[h_co_allchan[i].astype(int), rad_dist_allchan[i].astype(int)] = 0.5*(temp_far_co_surf_allchan[i]+temp_near_co_surf_allchan[i])
+            grid_array.append(grid)
+            for j in np.arange(len(levels)):
+                grid = np.zeros([Nz,Nx])*np.nan
+                grid[h_delta_array_allchan[i][j].astype(int), rad_dist_delta_array_allchan[i][j].astype(int)] = 0.5*(temp_far_delta_array_allchan[i][j]+temp_near_delta_array_allchan[i][j])
+                grid_array.append(grid)
+
+        grid_final_mean = np.nanmean(grid_array, axis=0)
+        grid_final_std = np.nanstd(grid_array, axis=0)
+
+        r_grid_temp = []
+        z_grid_temp = []
+        temp_grid= []
+        temp_std_grid= []
+        for r in np.arange(Nx):
+            for z in np.arange(Nz):
+                if not np.isnan(grid_final_mean[z,r]):
+                    r_grid_temp.append(r)
+                    z_grid_temp.append(z)
+                    temp_grid.append(grid_final_mean[z,r])
+                    temp_std_grid.append(grid_final_std[z,r])
+
+        np.savetxt(self.folder + '/temp_structure_values.txt',
+                    np.c_[r_grid_temp, z_grid_temp, temp_grid, temp_std_grid],
+                    delimiter = ' ',
+                    header = 'data from file ' + self.fits_file + '\nparameters used:\nPA: ' + str(self.PA) + '\ninc: ' + str(self.inc) + '\ndist: ' + str(self.dist) + ' \nvsys: ' + str(self.vsys) + ' \nXmax: ' + str(xmax) + ' \nZmax: ' + str(ymax) + '\nr[au] h[au] temp[K] std_temp[K]')
+
+
+        temp_grip_interpol = self.interpol_map(r_grid_temp, z_grid_temp, temp_grid, xmax, ymax)
+        std_temp_grip_interpol = self.interpol_map(r_grid_temp, z_grid_temp, temp_std_grid, xmax, ymax)
+
+        return grid_final_mean, grid_final_std, temp_grip_interpol, std_temp_grip_interpol
+
+    def interpol_map(self, r_grid_temp, z_grid_temp, temp_grid, xmax=800, ymax=300):
+
+        Nx = xmax
+        Nz = ymax
+        xlim=(0, Nx)
+        zlim = (0, Nz)
+
+        r_grid = np.linspace(xlim[0], xlim[1], Nx)  # AU
+        z_grid = np.linspace(zlim[0], zlim[1], Nz)  # AU
+
+        grid = np.meshgrid(r_grid, z_grid)  # AU
+        (r_m, z_m) = grid
+
+        interpol_from_x = r_grid_temp
+        interpol_from_z = z_grid_temp
+        interpol_to_x = r_m
+        interpol_to_z = z_m
+
+
+        temp_grip_interpol = griddata((interpol_from_x,interpol_from_z),
+                                       temp_grid,
+                                       (interpol_to_x,interpol_to_z),
+                                       method='linear')
+
+        return temp_grip_interpol
+
+
+#######################################
