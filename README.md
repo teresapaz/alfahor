@@ -18,19 +18,21 @@ To run the examples/tutorials you may need some files from the [MAPS collaborati
 If you use `ALFAHOR` as part of your research, please cite [Paneque-Carreño et al. 2022](https://ui.adsabs.harvard.edu/abs/2022arXiv221001130P/abstract)
 
 <pre><code>
-@ARTICLE{2022arXiv221001130P,
+@ARTICLE{2023A&A...669A.126P,
        author = {{Paneque-Carre{\~n}o}, T. and {Miotello}, A. and {van Dishoeck}, E.~F. and {Tabone}, B. and {Izquierdo}, A.~F. and {Facchini}, S.},
         title = "{Directly tracing the vertical stratification of molecules in protoplanetary disks}",
-      journal = {arXiv e-prints},
-     keywords = {Astrophysics - Earth and Planetary Astrophysics, Astrophysics - Solar and Stellar Astrophysics},
-         year = 2022,
-        month = oct,
-          eid = {arXiv:2210.01130},
-        pages = {arXiv:2210.01130},
+      journal = {\aap},
+     keywords = {astrochemistry, protoplanetary disks, Astrophysics - Earth and Planetary Astrophysics, Astrophysics - Solar and Stellar Astrophysics},
+         year = 2023,
+        month = jan,
+       volume = {669},
+          eid = {A126},
+        pages = {A126},
+          doi = {10.1051/0004-6361/202244428},
 archivePrefix = {arXiv},
        eprint = {2210.01130},
  primaryClass = {astro-ph.EP},
-       adsurl = {https://ui.adsabs.harvard.edu/abs/2022arXiv221001130P},
+       adsurl = {https://ui.adsabs.harvard.edu/abs/2023A&A...669A.126P},
       adsnote = {Provided by the SAO/NASA Astrophysics Data System}
 }
 </pre></code>
