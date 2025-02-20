@@ -15,7 +15,7 @@ To run the examples/tutorials you may need some files from the [MAPS collaborati
 
 # Citations
 
-If you use `ALFAHOR` as part of your research, please cite [Paneque-Carreño et al. 2022](https://ui.adsabs.harvard.edu/abs/2022arXiv221001130P/abstract)
+If you use `ALFAHOR` as part of your research, please cite [Paneque-Carreño et al. 2023](https://ui.adsabs.harvard.edu/abs/2022arXiv221001130P/abstract)
 
 <pre><code>
 @ARTICLE{2023A&A...669A.126P,
